@@ -29,7 +29,7 @@
 
 import SpriteKit
 
-// Math Helpers
+// MARK: Math Helpers
 extension Float {
   static func clamp(min: CGFloat, max: CGFloat, value: CGFloat) -> CGFloat {
     if (value > max) {
@@ -46,7 +46,15 @@ extension Float {
   }
 }
 
+extension CGFloat {
+    func deg_to_rad() -> CGFloat {
+        return CGFloat(M_PI) * self / 180.0
+    }
+}
+
 class GameScene: SKScene, SKPhysicsContactDelegate {
+    // MARK: Properties
+    
     // Bird
     var bird: SKSpriteNode!
     
@@ -138,9 +146,29 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     func getPipeWithSize(size: CGSize, side: Bool) -> SKSpriteNode {
-        // This function needs to return a SKSpriteNode otherwise a error will appear
-        // to prevent the error while we add the new content just return an empty pipe for now
-        let pipe:SKSpriteNode = SKSpriteNode()
+        let textureSize = CGRect(x: 0.0, y: 0.0, width: size.width, height: size.height)
+        let backgroundCGImage = UIImage(named: "pipe")!.CGImage
+        
+        UIGraphicsBeginImageContext(size)
+        let context = UIGraphicsGetCurrentContext()
+        CGContextDrawTiledImage(context, textureSize, backgroundCGImage)
+        let tiledBackground = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        let backgroundTexture = SKTexture(CGImage: tiledBackground.CGImage)
+        let pipe = SKSpriteNode(texture: backgroundTexture)
+        pipe.zPosition = 1
+        
+        let cap = SKSpriteNode(imageNamed: "bottom")
+        cap.position = CGPoint(x: 0.0, y: side ? -pipe.size.height/2 + cap.size.height/2 : pipe.size.height/2 - cap.size.height/2)
+        cap.zPosition = 5
+        pipe.addChild(cap)
+        
+        if side == true {
+            let angle: CGFloat = 180.0
+            cap.zRotation = angle.deg_to_rad()
+        }
+        
         return pipe
     }
 
@@ -174,10 +202,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let velocity_x = bird.physicsBody?.velocity.dx
         let velocity_y = bird.physicsBody?.velocity.dy
         
-        if velocity_y > 280 {
+        if velocity_y > 280 { // Max velocity is 280
             bird.physicsBody?.velocity = CGVector(dx: velocity_x!, dy: 280)
         }
         
+        // Rotate bird based on its vertical velocity vector
         bird.zRotation = Float.clamp(-1, max: 0.0, value: velocity_y! * (velocity_y < 0 ? 0.003 : 0.001))
     }
 }
