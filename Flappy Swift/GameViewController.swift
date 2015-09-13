@@ -38,8 +38,8 @@ class GameViewController: UIViewController {
 
     skView.showsFPS = true
     skView.showsNodeCount = true
-    // skView.showsPhysics   = true
-        
+    skView.showsPhysics   = true
+    
     if skView.scene == nil {
       let scene = GameScene(size: skView.bounds.size)
       skView.presentScene(scene)
