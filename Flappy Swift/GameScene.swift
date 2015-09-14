@@ -106,6 +106,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Init Physics
     func initWorld() {
+        physicsWorld.contactDelegate = self
         physicsWorld.gravity = CGVector(dx: 0.0, dy: -5.0) // -5G of gravity
         physicsBody = SKPhysicsBody(edgeLoopFromRect: CGRect(x: 0.0, y: floor_distance, width: size.width, height: size.height - floor_distance))
         physicsBody?.categoryBitMask = FSBoundaryCategory
@@ -121,6 +122,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         bird.physicsBody?.categoryBitMask = FSPlayerCategory
         bird.physicsBody?.contactTestBitMask = FSPipeCategory | FSGapCategory | FSBoundaryCategory
         bird.physicsBody?.collisionBitMask = FSPipeCategory | FSBoundaryCategory
+        bird.physicsBody?.affectedByGravity = false // at least before game starts
         bird.physicsBody?.allowsRotation = false
         bird.physicsBody?.restitution = 0.0 // not bouncy
         bird.zPosition = 50
@@ -269,7 +271,22 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - SKPhysicsContactDelegate
     func didBeginContact(contact: SKPhysicsContact) {
+        let collision: UInt32 = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
         
+        if collision == (FSGapCategory | FSPlayerCategory) {
+            score++
+            label_score.text = "\(score)"
+        }
+        
+        if collision == (FSPlayerCategory | FSPipeCategory) {
+            gameOver()
+        }
+        
+        if collision == (FSPlayerCategory | FSBoundaryCategory) {
+            if bird.position.y < 150 {
+                gameOver()
+            }
+        }
     }
 
     // MARK: - Touch Events
@@ -295,16 +312,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         delta = (last_update_time == 0.0) ? 0.0 : currentTime - last_update_time
         last_update_time = currentTime
         
-        moveBackground()
-        
-        let velocity_x = bird.physicsBody?.velocity.dx
-        let velocity_y = bird.physicsBody?.velocity.dy
-        
-        if velocity_y > 280 { // Max velocity is 280
-            bird.physicsBody?.velocity = CGVector(dx: velocity_x!, dy: 280)
+        if state != .FSGameStateEnded {
+            moveBackground()
+            
+            let velocity_x = bird.physicsBody?.velocity.dx
+            let velocity_y = bird.physicsBody?.velocity.dy
+            
+            if velocity_y > 280 { // Max velocity is 280
+                bird.physicsBody?.velocity = CGVector(dx: velocity_x!, dy: 280)
+            }
+            
+            // Rotate bird based on its vertical velocity vector
+            bird.zRotation = Float.clamp(-1, max: 0.0, value: velocity_y! * (velocity_y < 0 ? 0.003 : 0.001))
         }
         
-        // Rotate bird based on its vertical velocity vector
-        bird.zRotation = Float.clamp(-1, max: 0.0, value: velocity_y! * (velocity_y < 0 ? 0.003 : 0.001))
+        else {
+            bird.zRotation = CGFloat(M_PI)
+            bird.removeAllActions()
+        }
     }
 }
