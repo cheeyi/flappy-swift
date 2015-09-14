@@ -58,9 +58,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // Bird
     var bird: SKSpriteNode!
     
-    //Background
+    // Background
     var background: SKNode!
     let background_speed = 100.0
+    
+    // Score
+    var score = 0
+    var label_score: SKLabelNode!
+    
+    // Instructions
+    var instructions: SKSpriteNode!
+    
+    // Pipe origin
+    let pipe_origin_x: CGFloat = 382.0
     
     // Time Values
     var delta = NSTimeInterval(0)
@@ -75,11 +85,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     let FSPipeCategory: UInt32 = 1 << 2
     let FSGapCategory: UInt32 = 1 << 3
     
+    // States
+    enum FSGameState: Int {
+        case FSGameStateStarting
+        case FSGameStatePlaying
+        case FSGameStateEnded
+    }
+    
+    var state: FSGameState = .FSGameStateStarting
+    
     // MARK: - SKScene Initializacion
     override func didMoveToView(view: SKView) {
         initWorld()
         initBackground()
         initBird()
+        initHUD()
+        
+        runAction(SKAction.repeatActionForever(SKAction.sequence([SKAction.waitForDuration(2.0), SKAction.runBlock { self.initPipes()}])))
     }
 
     // MARK: - Init Physics
@@ -109,6 +131,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let textures = [SKTexture(imageNamed: "bird1"), SKTexture(imageNamed: "bird2")]
         
         bird.runAction(SKAction.repeatActionForever(SKAction.animateWithTextures(textures, timePerFrame: 0.1)))
+    }
+    
+    // MARK: - Score
+    
+    func initHUD() {
+        label_score = SKLabelNode(fontNamed:"MarkerFelt-Wide")
+        label_score.position = CGPoint(x: CGRectGetMidX(frame), y: CGRectGetMaxY(frame) - 100)
+        label_score.text = "0"
+        label_score.zPosition = 50
+        addChild(label_score)
+        
+        instructions = SKSpriteNode(imageNamed: "TapToStart")
+        instructions.position = CGPoint(x: CGRectGetMidX(frame), y: CGRectGetMidY(frame) - 10)
+        instructions.zPosition = 50
+        addChild(instructions)
     }
 
     // MARK: - Background Functions
@@ -142,7 +179,40 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Pipes Functions
     func initPipes() {
-
+        let screenSize: CGRect = UIScreen.mainScreen().bounds
+        let isWideScreen: Bool = (screenSize.height > 480)
+        
+        let bottom = getPipeWithSize(CGSize(width: 62, height: Float.range(40, max: isWideScreen ? 360 : 280)), side: false)
+        bottom.position = convertPoint(CGPoint(x: pipe_origin_x, y: CGRectGetMinY(frame) + bottom.size.height/2 + floor_distance), toNode: background)
+        bottom.physicsBody = SKPhysicsBody(rectangleOfSize: bottom.size)
+        bottom.physicsBody?.categoryBitMask = FSPipeCategory;
+        bottom.physicsBody?.contactTestBitMask = FSPlayerCategory;
+        bottom.physicsBody?.collisionBitMask = FSPlayerCategory;
+        bottom.physicsBody?.dynamic = false
+        bottom.zPosition = 20
+        background.addChild(bottom)
+        
+        let threshold = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: 10, height: 100))
+        threshold.position = convertPoint(CGPoint(x: pipe_origin_x, y: floor_distance + bottom.size.height + threshold.size.height/2), toNode: background)
+        threshold.physicsBody = SKPhysicsBody(rectangleOfSize: threshold.size)
+        threshold.physicsBody?.categoryBitMask = FSGapCategory
+        threshold.physicsBody?.contactTestBitMask = FSPlayerCategory
+        threshold.physicsBody?.collisionBitMask = 0
+        threshold.physicsBody?.dynamic = false
+        threshold.zPosition = 20
+        background.addChild(threshold)
+        
+        let topSize = size.height - bottom.size.height - threshold.size.height - floor_distance
+        
+        let top = getPipeWithSize(CGSize(width: 62, height: topSize), side: true)
+        top.position = convertPoint(CGPoint(x: pipe_origin_x, y: CGRectGetMaxY(frame) - top.size.height/2), toNode: background)
+        top.physicsBody = SKPhysicsBody(rectangleOfSize: top.size)
+        top.physicsBody?.categoryBitMask = FSPipeCategory;
+        top.physicsBody?.contactTestBitMask = FSPlayerCategory;
+        top.physicsBody?.collisionBitMask = FSPlayerCategory;
+        top.physicsBody?.dynamic = false
+        top.zPosition = 20
+        background.addChild(top)
     }
 
     func getPipeWithSize(size: CGSize, side: Bool) -> SKSpriteNode {
@@ -174,11 +244,27 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Game Over helpers
     func gameOver() {
+        state = .FSGameStateEnded
+        bird.physicsBody?.categoryBitMask = 0
+        bird.physicsBody?.collisionBitMask = FSBoundaryCategory
         
+        var timer = NSTimer.scheduledTimerWithTimeInterval(4.0, target: self, selector: Selector("restartGame"), userInfo: nil, repeats: false)
     }
 
     func restartGame() {
+        state = .FSGameStateStarting
+        bird.removeFromParent()
+        background.removeAllChildren()
+        background.removeFromParent()
         
+        instructions.hidden = false
+        removeActionForKey("generator")
+        
+        score = 0
+        label_score.text = "0"
+        
+        initBird()
+        initBackground()
     }
 
     // MARK: - SKPhysicsContactDelegate
@@ -188,8 +274,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Touch Events
     override func touchesBegan(touches: Set<NSObject>, withEvent event: UIEvent) {
-        // Apply an impulse to the DY (vertical) value of the physics body of the bird
-        bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 25))
+        if state == .FSGameStateStarting {
+            state = .FSGameStatePlaying
+            
+            instructions.hidden = true
+            
+            bird.physicsBody?.affectedByGravity = true
+            bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 25))
+            
+            runAction(SKAction.repeatActionForever(SKAction.sequence([SKAction.waitForDuration(2.0), SKAction.runBlock { self.initPipes()}])), withKey: "generator")
+        }
+            
+        else if state == .FSGameStatePlaying {
+            bird.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 25))
+        }
     }
 
     // MARK: - Frames Per Second
